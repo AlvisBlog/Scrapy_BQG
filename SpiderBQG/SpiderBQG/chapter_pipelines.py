@@ -8,6 +8,9 @@ from SpiderBQG import settings
 
 
 class Spider_bqg_Pipeline(object):
+
+
+
     def __init__(self):
 
         '''初始化连接数据库'''
@@ -29,6 +32,7 @@ class Spider_bqg_Pipeline(object):
         self.cursor = self.connect.cursor()
 
         print("数据库连接成功")
+
 
     def process_item(self, item, spider):
 
