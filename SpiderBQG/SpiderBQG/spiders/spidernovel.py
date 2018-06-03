@@ -269,11 +269,12 @@ class SpidernovelSpider(scrapy.Spider):
 
         chapter_item['chapter_name']=re.findall('<h1>(.*?)</h1>',html,re.S)[0]
 
-        data=re.findall('<div id="content">(.*?)</div>',html,re.S)[0]
+        data=re.findall('<div id="content">(.*?)/div>',html,re.S)[0]
 
-        chapter_content=re.findall('&nbsp;&nbsp;&nbsp;&nbsp;(.*?)<br />',data,re.S)
+        chapter_content=re.findall('&nbsp;&nbsp;&nbsp;&nbsp;(.*?)<',data,re.S)
 
         chapter_item['chapter_content']=''
+
 
         for sentence in chapter_content:
 
