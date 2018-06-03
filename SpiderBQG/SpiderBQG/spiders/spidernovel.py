@@ -6,122 +6,217 @@ from time import sleep
 import requests
 from urllib.parse import quote
 import scrapy
+import pymysql
 
 from SpiderBQG.items import Spider_bqg_novel_Item,Spider_bqg_chapter_Item
 
-def GetNovelUrl():
 
-    novel_search_list={}
+class GetSpiderUrl:
 
-    url_list=[]
+    def __init__(self):
 
-    while True:
+        self.novel_search_list = {}
 
-        try:
+        self.user_url=[]
 
-            input_data = input("请输入搜索的小说名(小说名称的关键字,避免完整名称):")
+        self.spider_url=[]
 
-            keyword = quote(input_data, encoding='gb2312')
+        self.unspider_url = []
 
-            url = 'http://www.biquge.com.tw/modules/article/soshu.php?searchkey={}'.format(keyword)
 
-            response = requests.get(url)
+    def Get_User_NovelUrl(self):
 
-            html=response.text.encode('ISO-8859-1').decode('GBK')
 
-            novel_list = re.findall('<tr id="nr">(.*?)</tr>', html, re.S)
+        while True:
 
-            if len(novel_list) == 0:
+            try:
 
-                print("抱歉！无搜索结果,需要重新选择搜索关键词")
+                input_data = input("请输入搜索的小说名(小说名称的关键字,避免完整名称):")
+
+                keyword = quote(input_data, encoding='gb2312')
+
+                url = 'http://www.biquge.com.tw/modules/article/soshu.php?searchkey={}'.format(keyword)
+
+                response = requests.get(url)
+
+                html = response.text.encode('ISO-8859-1').decode('GBK')
+
+                novel_list = re.findall('<tr id="nr">(.*?)</tr>', html, re.S)
+
+                if len(novel_list) == 0:
+
+                    print("抱歉！无搜索结果,需要重新选择搜索关键词")
+
+                    continue
+
+                else:
+
+                    print("搜索的小说如下")
+
+                    max_page = re.findall('<em id="pagestats">1/(.*?)</em>', html, re.S)[0]
+
+                    for page in range(1, int(max_page) + 1):
+
+                        visited_url = url + "&page={}".format(page)
+
+                        response = requests.get(visited_url)
+
+                        html = response.text.encode('ISO-8859-1').decode('GBK')
+
+                        novel_list = re.findall('<tr id="nr">(.*?)</tr>', html, re.S)
+
+                        for novel in novel_list:
+                            novel_link = re.findall('<a href="(.*?)">', novel, re.S)[0]
+
+                            novel_name = re.findall('<td class="odd"><.*?">(.*?)<', novel, re.S)[0]
+
+                            self.novel_search_list[novel_name] = novel_link
+
+                            print(novel_name, novel_link)
+
+                    while True:
+
+                        try:
+
+                            choose_novel = input("请从小说列表里选择需要爬取的小说:")
+
+                            if choose_novel == 'all':
+
+                                print("你选择爬取所有的小说")
+
+                                sleep(5)
+
+                                for name, link in self.novel_search_list.items():
+
+                                    self.user_url.append(link)
+
+                                    print("你选择的爬取链接为:%s,小说名称是:%s" % (link, name))
+
+                                break
+
+                            elif choose_novel == 'quit':
+
+                                print("你选择退出爬虫")
+
+                                break
+
+                            else:
+
+                                chooses = choose_novel.split(" ")
+
+                                for choose in chooses:
+                                    print("你选择的爬取链接为:%s" % self.novel_search_list[choose])
+
+                                    self.user_url.append(self.novel_search_list[choose])
+
+                                break
+
+                        except Exception as s:
+
+                            print("你的输入不合法,需要重新选择")
+
+                            continue
+
+                break
+
+            except Exception as e:
+
+                print("搜索有唯一结果,网站自动转到小说页面,需要重新选择搜索关键词")
 
                 continue
 
-            else:
+        return self.user_url
 
-                print("搜索的小说如下")
 
-                max_page = re.findall('<em id="pagestats">1/(.*?)</em>', html, re.S)[0]
+    def Connect_DB(self):
 
-                for page in range(1, int(max_page) + 1):
+        id_list = []
 
-                    visited_url = url + "&page={}".format(page)
+        try:
 
-                    response = requests.get(visited_url)
+            print("---正在尝试连接数据库---")
 
-                    html = response.text.encode('ISO-8859-1').decode('GBK')
+            sleep(3)
 
-                    novel_list = re.findall('<tr id="nr">(.*?)</tr>', html, re.S)
+            db = pymysql.connect(
+                host='127.0.0.1',
+                port=3306,
+                database='biquge',
+                user='root',
+                passwd='',
+                charset='utf8'
+            )
+            print("数据库连接成功")
 
-                    for novel in novel_list:
+            # 提取小说ID列表
+            for url in self.user_url:
 
-                        novel_link = re.findall('<a href="(.*?)">', novel, re.S)[0]
+                id_list.append(re.findall('http.*?//.*?/(.*?)/', url, re.S)[0])
 
-                        novel_name = re.findall('<td class="odd"><.*?">(.*?)<', novel, re.S)[0]
+            cursor = db.cursor()
 
-                        novel_search_list[novel_name] = novel_link
+            try:
 
-                        print(novel_name,novel_link)
+                print("正在查询小说是否已存在")
+                sleep(3)
 
-                while True:
+                # 遍历ID列表,进行查询
+                for id in id_list:
 
-                    try:
+                    cursor.execute('select * from novel_info WHERE novel_id=%s', [id])
 
-                        choose_novel = input("请从小说列表里选择需要爬取的小说:")
+                    result = cursor.fetchone()
 
-                        if choose_novel == 'all':
+                    if result is None:
 
-                            print("你选择爬取所有的小说")
+                        self.spider_url.append("http://www.biquge.com.tw/%s" % id)
 
-                            sleep(5)
+                    else:
 
-                            for name,link in novel_search_list.items():
+                        self.unspider_url.append('http://www.biquge.com.tw/%s' % id)
 
-                                url_list.append(link)
+                        print("数据库存在该小说," + "名称为: %s,ID为: %s" % (result[3], result[2]))
 
-                                print("你选择的爬取链接为:%s,小说名称是:%s" %(link,name))
 
-                            break
+            except Exception as e:
 
-                        elif choose_novel=='quit':
+                print("查询异常,错误代码:%s" % e)
 
-                            print("你选择退出爬虫")
 
-                            break
+        except Exception as error:
 
-                        else:
+            print("连接失败,错误代码:%s" % error)
 
-                            chooses = choose_novel.split(" ")
 
-                            for choose in chooses:
+        if len(self.spider_url)==0:
 
-                                url_list.append(novel_search_list[choose])
+            print("爬取链接为空")
 
-                                print("你选择的爬取链接为:%s" % novel_search_list[choose])
+        else:
 
-                            break
+            print("需要爬取的连接为:")
 
-                    except Exception as s:
+            print(self.spider_url)
 
-                        print("你的输入不合法,需要重新选择")
+        return self.spider_url
 
-                        continue
-
-            break
-
-        except Exception as e:
-
-            print("搜索有唯一结果,网站自动转到小说页面,需要重新选择搜索关键词")
-
-            continue
-
-    return url_list
 
 class SpidernovelSpider(scrapy.Spider):
 
+    spider=GetSpiderUrl()
+
+    spider.Get_User_NovelUrl()
+
+    if len(spider.user_url) == 0:
+
+        spider_url=[]
+
+    else:
+        spider_url=spider.Connect_DB()
+
     name = 'spidernovel'
 
-    start_urls = GetNovelUrl()
+    start_urls = spider_url
 
 
     def parse(self, response):
